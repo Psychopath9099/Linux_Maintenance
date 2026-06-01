@@ -1,0 +1,23 @@
+# Logs
+
+*.log
+
+# Temporary files
+
+*.tmp
+*.bak
+*.swp
+
+# VS Code
+
+.vscode/
+
+# Python cache (if you ever add Python tools)
+
+**pycache**/
+*.pyc
+
+# OS files
+
+.DS_Store
+Thumbs.db
