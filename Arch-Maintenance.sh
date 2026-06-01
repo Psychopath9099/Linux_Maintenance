@@ -1,3 +1,14 @@
+#!/bin/bash
+
+# Kali-Maintenance.sh
+# Copyright (C) 2026 psychopath9099-dot
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+
 #!/usr/bin/env bash
 # =============================================================================
 # ARCH LINUX MAINTENANCE SCRIPT
