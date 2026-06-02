@@ -1,15 +1,12 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Kali-Maintenance.sh
-# Copyright (C) 2026 psychopath9099-dot
+# Arch-Maintenance.sh
+# Copyright (C) 2026 psychopath9099
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-
-
-#!/usr/bin/env bash
 # =============================================================================
 # ARCH LINUX MAINTENANCE SCRIPT
 # =============================================================================
@@ -226,10 +223,19 @@ step_syu() {
     # Single atomic transaction — avoids the partial-upgrade risk of
     # a separate -Syy followed by -Su.
     # Fatal on failure: a half-upgraded Arch system is unsafe.
-    run_cmd pacman -Syu --noconfirm 2>&1 | tee -a "$LOG_FILE" || {
-        log_error "pacman -Syu failed. Resolve conflicts manually before re-running."
-        exit 1
-    }
+    # Note: we avoid piping pacman through tee directly here because it
+    # can interfere with pacman's stdin and break --noconfirm on some setups.
+    # Instead, run pacman with output going to both terminal and log via tee
+    # using process substitution, then check PIPESTATUS[0] for pacman's own exit code.
+    if $DRY_RUN; then
+        log_info "[DRY-RUN] pacman -Syu --noconfirm"
+    else
+        pacman -Syu --noconfirm 2>&1 | tee -a "$LOG_FILE"; pacman_exit="${PIPESTATUS[0]}"
+        if (( pacman_exit != 0 )); then
+            log_error "pacman -Syu failed (exit $pacman_exit). Resolve conflicts manually before re-running."
+            exit 1
+        fi
+    fi
     log_ok "System upgraded."
 }
 
@@ -285,9 +291,13 @@ step_clean_cache() {
     log_section "Step  6/11" "Package cache clean"
     if command -v paccache &>/dev/null; then
         log_info "Keeping 2 most recent versions per package (allows one rollback)..."
-        run_cmd paccache -rk2  2>&1 | tee -a "$LOG_FILE"
-        log_info "Removing all cached versions of uninstalled packages..."
-        run_cmd paccache -ruk0 2>&1 | tee -a "$LOG_FILE"
+        if $DRY_RUN; then
+            log_info "[DRY-RUN] paccache -rk2"
+            log_info "[DRY-RUN] paccache -ruk0"
+        else
+            paccache -rk2  2>&1 | tee -a "$LOG_FILE"
+            paccache -ruk0 2>&1 | tee -a "$LOG_FILE"
+        fi
         log_ok "Package cache cleaned."
     else
         log_warn "paccache not found — skipping cache cleanup."
@@ -348,18 +358,26 @@ step_snap() {
     log_section "Step 10/11" "snap + flatpak update"
     if command -v snap &>/dev/null; then
         log_info "Snap detected. Refreshing all snaps..."
-        run_cmd snap refresh 2>&1 | tee -a "$LOG_FILE" \
-            && log_ok "Snap packages updated." \
-            || log_warn "Snap refresh encountered an issue — check log."
+        if $DRY_RUN; then
+            log_info "[DRY-RUN] snap refresh"
+        else
+            snap refresh 2>&1 | tee -a "$LOG_FILE"
+            if (( PIPESTATUS[0] == 0 )); then log_ok "Snap packages updated."
+            else log_warn "Snap refresh encountered an issue — check log."; fi
+        fi
     else
         log_info "Snap not installed — skipping."
     fi
 
     if command -v flatpak &>/dev/null; then
         log_info "Flatpak detected. Updating all apps..."
-        run_cmd flatpak update -y 2>&1 | tee -a "$LOG_FILE" \
-            && log_ok "Flatpak apps updated." \
-            || log_warn "Flatpak update encountered an issue — check log."
+        if $DRY_RUN; then
+            log_info "[DRY-RUN] flatpak update -y"
+        else
+            flatpak update -y 2>&1 | tee -a "$LOG_FILE"
+            if (( PIPESTATUS[0] == 0 )); then log_ok "Flatpak apps updated."
+            else log_warn "Flatpak update encountered an issue — check log."; fi
+        fi
     else
         log_info "Flatpak not installed — skipping."
     fi
@@ -419,7 +437,7 @@ print_summary() {
     echo -e "${WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
     echo -e "${WHITE}  MAINTENANCE COMPLETE${RESET}"
     echo -e "${WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-    printf "  ${DIM}%-12s${RESET} %s\n"  "Host:"       "$(hostname)"
+    printf "  ${DIM}%-12s${RESET} %s\n"  "Host:"       "${HOSTNAME:-$(cat /etc/hostname 2>/dev/null || echo 'unknown')}"
     printf "  ${DIM}%-12s${RESET} %s\n"  "Kernel:"     "$(uname -r)"
     printf "  ${DIM}%-12s${RESET} %s\n"  "Free /:"     "${free_after}"
     printf "  ${DIM}%-12s${RESET} %ds\n" "Duration:"   "${elapsed}"
